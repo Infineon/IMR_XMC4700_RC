@@ -19,12 +19,15 @@ SPDX-License-Identifier: MIT
 <p>Furthermore, using an external <a href="https://www.frsky-rc.com/product/xm-plus/">SBUS receiver</a> connected to the main / robot control allows one to directly control the IMR using the following commands:
 <br>
 <br>
+<!--
 <style>
 table, th, td {
   border:1px solid black;
 }
-</style>
-
+th {
+  text-align:left;
+}
+</style>-->
 <table style="width:100%">
   <tr>
     <th>SBUS-Channel</th>
