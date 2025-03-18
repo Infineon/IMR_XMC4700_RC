@@ -14,7 +14,7 @@ SPDX-License-Identifier: MIT
 ## Overview
 
 <p>This is the official Infineon GitHub repository for ModusToolbox™ software used with the demo board for IMR main / robot control.</p>
-<p>The IMR main / robot control is responsible for receiving, modifying and  forwarding commands. Its main purpose is to calculate a trajectroy command "(vx,vy,theta)" into the relative motor speeds and sending them to the <a href="https://github.com/Infineon/IMR_IMD701_MC">IMR motor control</a> boards.</p>
+<p>The IMR main / robot control is responsible for receiving, modifying and forwarding commands. Its main purpose is to calculate a trajectory command "(vx,vy,theta)" into the relative motor speeds and sending them to the <a href="https://github.com/Infineon/IMR_IMD701_MC">IMR motor control</a> boards.</p>
 
 <p>Furthermore, using an external <a href="https://www.frsky-rc.com/product/xm-plus/">SBUS receiver</a> connected to the main / robot control allows one to directly control the IMR using the following commands:
 <br>
@@ -123,7 +123,7 @@ th {
 ### How to import and use this repository
 <ol>
 <li> Install and start ModusToolbox™ and select a workspace to be used (tested with Version 3.3, and 3.4).
-<li> Import the project with the import wizard by pressing 'File' – 'Import…'. <br>
+<li> Import the project with the import wizard by pressing 'File' – 'Import…'. <br><br>
     <picture>
         <img src="./assets/images/MTB_Import_1.png">
     </picture>
@@ -229,7 +229,6 @@ Precise definition of the software and its features can be found in the close-to
 - [Robotics development platform: Infineon Mobile Robot (IMR)](https://www.infineon.com/cms/de/applications/robotics/development-platform/)
 - [IMR motor control](https://www.infineon.com/cms/en/product/evaluation-boards/demo_imr_mtrctrl_v1/)
 - [IMR motor position angle sensor](https://www.infineon.com/cms/en/product/evaluation-boards/demo_imr_angle_sens_v1/)
-
 
 ### Licensing
 

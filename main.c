@@ -1,12 +1,14 @@
 /******************************************************************************
-* File Name:   		main.c
+* File Name:	main.c
 *
-* Description: 		Main file of the IMR Robot Control see doctrings or README.md for
-*              		Details.
+* Description:	Main file of the IMR Robot Control
+* 				see doctrings or README.md for details.
 *
 * Related Document: See README.md
 * 
-* Authors: 		Granig Jonas (PSS SIS UPC) & Schmidt Michael (IFAT PSS AIS SAE)                                                               
+* Authors: 		Schmidt Michael
+* 				Granig Jonas
+* 				Detzel Samuel
 *
 *******************************************************************************
 *
@@ -49,10 +51,22 @@
 #include <stdlib.h>
 
 uint8_t RC_failsafe = 0;
-int16_t remote_v[3] = { 0 , 0 , 0 };		// Trajectory values from RC
+int16_t remote_v[3] = { 0 , 0 , 0 }; // Trajectory values from RC
 RCinput_t RemoteControl_IN;
 int16_t wS[4]; 
 extern float encoderSpeed[4];
+
+/******************************************************************************
+ * CANStatus_LED:
+ * Set the blue LED on board to blink when the CAN transmit is successful
+ *****************************************************************************/
+void CANStatus_LED(CAN_STATUS_t status)
+{
+	if(status == CAN_SUCCESS){
+		XMC_GPIO_ToggleOutput(LED_Blue_PORT,LED_Blue_PIN); // LED blinks
+	}
+	else XMC_GPIO_SetOutputHigh(LED_Blue_PORT,LED_Blue_PIN); // LED OFF
+}
 
 /***
  * 
@@ -62,30 +76,44 @@ extern float encoderSpeed[4];
  * 
  ***/
 
-void TIMER_TIMEOUT_PERIOD_MATCH_EVENT_HANDLER(void) {
+void TIMER_TIMEOUT_PERIOD_MATCH_EVENT_HANDLER(void)
+{
 	uint8_t CANBuffer[6];
-	XMC_CAN_STATUS_t sendStatus;
+	CAN_STATUS_t sendStatus;
 	int16_t motorOutput[4] = { 0 };
 
 	applyFIRFilter(wS, motorOutput);
 
-	CANBuffer[0] = (uint8_t)  ((((int16_t) (motorOutput[0] * 1) & 0xFF00) >> 8) & 0xFF);
-	CANBuffer[1] = (uint8_t) 	((int16_t) (motorOutput[0] * 1) & 0xFF);
+	CANBuffer[0] = (uint8_t)
+			((((int16_t)(motorOutput[0] * 1) & 0xFF00) >> 8) & 0xFF);
+	CANBuffer[1] = (uint8_t)((int16_t)(motorOutput[0] * 1) & 0xFF);
 	sendStatus = CAN_TX_Request(MOT_FL_SPEED_COMMAND, CANBuffer, 2);
-	CANBuffer[0] = (uint8_t)  ((((int16_t) (motorOutput[1] * 1) & 0xFF00) >> 8) & 0xFF);
-	CANBuffer[1] = (uint8_t) 	((int16_t) (motorOutput[1] * 1) & 0xFF);
+	CANStatus_LED(sendStatus);
+
+	CANBuffer[0] = (uint8_t)
+			((((int16_t)(motorOutput[1] * 1) & 0xFF00) >> 8) & 0xFF);
+	CANBuffer[1] = (uint8_t)((int16_t)(motorOutput[1] * 1) & 0xFF);
 	sendStatus = CAN_TX_Request(MOT_FR_SPEED_COMMAND, CANBuffer, 2);
-	CANBuffer[0] = (uint8_t)  ((((int16_t) (motorOutput[2] * 1) & 0xFF00) >> 8) & 0xFF);
-	CANBuffer[1] = (uint8_t) 	((int16_t) (motorOutput[2] * 1) & 0xFF);
+	CANStatus_LED(sendStatus);
+
+	CANBuffer[0] = (uint8_t)
+			((((int16_t)(motorOutput[2] * 1) & 0xFF00) >> 8) & 0xFF);
+	CANBuffer[1] = (uint8_t)((int16_t)(motorOutput[2] * 1) & 0xFF);
 	sendStatus = CAN_TX_Request(MOT_BL_SPEED_COMMAND, CANBuffer, 2);
-	CANBuffer[0] = (uint8_t)  ((((int16_t) (motorOutput[3] * 1) & 0xFF00) >> 8) & 0xFF);
-	CANBuffer[1] = (uint8_t) 	((int16_t) (motorOutput[3] * 1) & 0xFF);
+	CANStatus_LED(sendStatus);
+
+	CANBuffer[0] = (uint8_t)
+			((((int16_t)(motorOutput[3] * 1) & 0xFF00) >> 8) & 0xFF);
+	CANBuffer[1] = (uint8_t)((int16_t)(motorOutput[3] * 1) & 0xFF);
 	sendStatus = CAN_TX_Request(MOT_BR_SPEED_COMMAND, CANBuffer, 2);
+	CANStatus_LED(sendStatus);
 
 	memset(wS,0,8);
 
 	if(Trajectory_ttl > 0U) {
-		if((RC_failsafe > 0 && RemoteControl_IN.Switch_SD == 1) || RC_failsafe == 0){	// processing the trajectory CAN command
+		// processing the trajectory CAN command
+		if((RC_failsafe > 0 && RemoteControl_IN.Switch_SD == 1) ||
+				RC_failsafe == 0){
 			int16_t vel[3];	// Robot target velocity
 			can2Vel(Trajectory_data, vel);
 			inverseKinematics(vel, wS);
@@ -102,12 +130,8 @@ void TIMER_TIMEOUT_PERIOD_MATCH_EVENT_HANDLER(void) {
 	CANBuffer[3] = (uint8_t) (v_odo[1] & 0xFF);
 	CANBuffer[4] = (uint8_t) ((v_odo[2] & 0xFF00) >> 8);
 	CANBuffer[5] = (uint8_t) (v_odo[2] & 0xFF);
-	CAN_TX_Request(ROBOT_ODOMETRY_ESTIMATE, CANBuffer, 6);
-
-
-	if(sendStatus == CAN_STATUS_NODE_BUSY){
-		XMC_GPIO_SetOutputHigh(LED_Blue_PORT,LED_Blue_PIN);
-	} else XMC_GPIO_SetOutputLow(LED_Blue_PORT,LED_Blue_PIN);
+	sendStatus = CAN_TX_Request(ROBOT_ODOMETRY_ESTIMATE, CANBuffer, 6);
+	CANStatus_LED(sendStatus);
 }
 
 /***
@@ -123,8 +147,8 @@ int main(void)
     result = cybsp_init();
 	
 	CAN_Initialize();
-	XMC_GPIO_SetOutputHigh(LED_Blue_PORT,LED_Blue_PIN);
-	XMC_GPIO_SetOutputHigh(LED_Green_PORT,LED_Green_PIN);
+	XMC_GPIO_SetOutputHigh(LED_Blue_PORT,LED_Blue_PIN); 	// LED OFF
+	XMC_GPIO_SetOutputHigh(LED_Green_PORT,LED_Green_PIN);	// LED OFF
 	XMC_UART_CH_EnableInputInversion(SBUS_UART_HW, XMC_UART_CH_INPUT_RXD);
 
     XMC_CCU4_SLICE_StartTimer(TIMER_TIMEOUT_HW);
@@ -147,29 +171,34 @@ int main(void)
 	    if(SBUSRX_Parse() && !BMS_PowerReduced){
 		    RemoteControl_IN = Process_RC_Inputs(sbus_data);
 			
-		    if(sbus_data.failsafe == false) RC_failsafe = RC_TIME_TO_LIVE;
+		    if(sbus_data.failsafe == false)
+		    	RC_failsafe = RC_TIME_TO_LIVE;
 
-		    readLEDinput(RemoteControl_IN); 							// delete for not using LED control via RemoteControl
+		    // delete for not using LED control via RemoteControl
+		    readLEDinput(RemoteControl_IN);
 
 		    memset(remote_v,0,6);
-		    if(RemoteControl_IN.Switch_SD == 3 && sbus_data.lost_frame == false) {	// Switch D Must be enabled (Dead man switch)
+		    // Switch D Must be enabled (Dead man switch)
+		    if(RemoteControl_IN.Switch_SD == 3 &&
+		    		sbus_data.lost_frame == false) {
 
-			    remote_v[0] = RemoteControl_IN.RightStick_UpDown*10922/100;
+			    remote_v[0] =  RemoteControl_IN.RightStick_UpDown*10922/100;
 			    remote_v[1] = -RemoteControl_IN.RightStick_LeftRight*10922/100;
-			    remote_v[2] = (int16_t) RemoteControl_IN.LeftStick_LeftRight*5215/100*2;
+			    remote_v[2] =  RemoteControl_IN.LeftStick_LeftRight*5215/100*2;
+
 			    if(remote_v[0] || remote_v[1] || remote_v[2]) {
 				      inverseKinematics(remote_v, wS);
 			    }
-			    
 		    }
-			XMC_GPIO_SetOutputHigh(LED_Green_PORT, LED_Green_PIN);
-
-	    } else if(RC_failsafe != 0) {								// Green OnBoard LED will be off if no RC commands are received after TTL.
+			XMC_GPIO_SetOutputLow(LED_Green_PORT, LED_Green_PIN);
+	    }
+	    // Green OnBoard LED will be off
+	    // if no RC commands are received after TTL.
+	    else if(RC_failsafe != 0) {
 		    RC_failsafe--; 
-		    XMC_GPIO_SetOutputLow(LED_Green_PORT, LED_Green_PIN);
+		    XMC_GPIO_SetOutputHigh(LED_Green_PORT, LED_Green_PIN);
 	    }
 	    memset(remote_v,0,6);
-
     }
 }
 

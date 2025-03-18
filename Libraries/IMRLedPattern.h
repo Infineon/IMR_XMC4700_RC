@@ -37,6 +37,7 @@
 #include "IMR_CAN_GLOBAL.h"
 #include <stdint.h>
 
+#define BARGRAPH_ENABLED 	0
 #define BARGRAPH_FRONT_ONLY 1
 
 void robotLED2boardLED(bool robotLED[3][56], bool boardLEDs[12][23]);
