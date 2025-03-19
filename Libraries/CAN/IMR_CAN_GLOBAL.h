@@ -130,7 +130,7 @@ typedef enum IMR_CAN_SENSOR_LED_COMMANDS {
     LED_MODE_STEADY	= 	0x4F
 } IMR_CAN_SENSOR_LED_COMMANDS_t;
 
-/***************************************************************************************************************/
+/*****************************************************************************/
 
 CAN_STATUS_t CAN_TX_Request(uint32_t CAN_ID, uint8_t* Target_Data,
 		uint8_t Target_Data_Length);
