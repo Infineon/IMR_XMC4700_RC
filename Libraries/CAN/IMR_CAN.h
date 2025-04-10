@@ -64,48 +64,6 @@ uint32_t XMC_CAN_MO_Busy(XMC_CAN_MO_t* mo_ptr);
 // CAN Node 0 ... CAN_NODE0		CAN Node 1 ... CAN_NODE1
 #define CAN_NODE_CONFIGURATOR_CHANNEL			CAN_NODE2
 
-/* IRQ Event Source Names for XMC4700
- * see XMC4700 Reference Manual Table 5-1 */
-#define CAN_IRQ_RX_VELOCITY_NUMBER       		CAN0_1_IRQn
-#define CAN_IRQ_RX_VELOCITY_MSG_HANDLER      	IRQ_Hdlr_77
-
-#define CAN_IRQ_RX_ENCODER_FL_NUMBER     		CAN0_2_IRQn
-#define CAN_IRQ_RX_ENCODER_FL_MSG_HANDLER   	IRQ_Hdlr_78
-#define CAN_IRQ_RX_ENCODER_FR_NUMBER     		CAN0_3_IRQn
-#define CAN_IRQ_RX_ENCODER_FR_MSG_HANDLER   	IRQ_Hdlr_79
-#define CAN_IRQ_RX_ENCODER_BL_NUMBER     		CAN0_4_IRQn
-#define CAN_IRQ_RX_ENCODER_BL_MSG_HANDLER   	IRQ_Hdlr_80
-#define CAN_IRQ_RX_ENCODER_BR_NUMBER     		CAN0_5_IRQn
-#define CAN_IRQ_RX_ENCODER_BR_MSG_HANDLER   	IRQ_Hdlr_81
-
-#define CAN_IRQ_RX_ENABLE_PWR_NUMBER     		CAN0_6_IRQn
-#define CAN_IRQ_RX_ENABLE_PWR_MSG_HANDLER   	IRQ_Hdlr_82
-
-/* CAN Interrupt Number Setting:  XMC1404 = IRQ3_IRQn;
- * XMC4700 = CAN0_0_IRQn */
-#define CAN_IRQ_RX_REDUCE_PWR_NUMBER            CAN0_0_IRQn
-/* CAN Interrupt Handler Setting: XMC1404 = IRQ3_Handler;
- * XMC4700 = IRQ_Hdlr_76 */
-#define CAN_IRQ_RX_REDUCE_PWR_MSG_HANDLER       IRQ_Hdlr_76
-
-
-#define CAN_STATUS_NODE_BUSY		( 2U )
-
-#define CAN_NODE_GLOBAL_HW_NAME			CAT(CAN_NODE_CONFIGURATOR_NAME, _HW)
-#define CAN_NODE_TRANSMIT_LMO_NAME		CAT(CAN_NODE_CONFIGURATOR_NAME, _LMO_1)
-
-#define CAN_NODE_RX_VELOCITY_LMO_NAME	CAT(CAN_NODE_CONFIGURATOR_NAME, _LMO_2)
-#define CAN_NODE_RX_ENCODER_FL_LMO_NAME	CAT(CAN_NODE_CONFIGURATOR_NAME, _LMO_3)
-#define CAN_NODE_RX_ENCODER_FR_LMO_NAME	CAT(CAN_NODE_CONFIGURATOR_NAME, _LMO_4)
-#define CAN_NODE_RX_ENCODER_BL_LMO_NAME	CAT(CAN_NODE_CONFIGURATOR_NAME, _LMO_5)
-#define CAN_NODE_RX_ENCODER_BR_LMO_NAME	CAT(CAN_NODE_CONFIGURATOR_NAME, _LMO_6)
-
-#define CAN_NODE_RX_ENABLE_PWR_LMO_NAME	CAT(CAN_NODE_CONFIGURATOR_NAME, _LMO_7)
-#define CAN_NODE_RX_REDUCE_PWR_LMO_NAME	CAT(CAN_NODE_CONFIGURATOR_NAME, _LMO_0)
-
-
-/* ------------------------------------------------------------------------- */
-
 /*****************************************************************************/
 /****************** DO NOT CHANGE SETTINGS ABOVE THIS LINE *******************/
 /*****************************************************************************/
@@ -143,7 +101,7 @@ extern uint8_t Trajectory_data[6];
 /*****************************************************************************/
 
 #define CAN_NODE_TRANSMIT_LMO_NAME		CAT(CAN_NODE_CONFIGURATOR_NAME, _LMO_1)
-#define CAN_NODE_RX_TRAJECTORY_LMO_NAME	CAT(CAN_NODE_CONFIGURATOR_NAME, _LMO_2)
+#define CAN_NODE_RX_VELOCITY_LMO_NAME	CAT(CAN_NODE_CONFIGURATOR_NAME, _LMO_2)
 
 #define CAN_NODE_RX_ENCODER_FL_LMO_NAME	CAT(CAN_NODE_CONFIGURATOR_NAME, _LMO_3)
 #define CAN_NODE_RX_ENCODER_FR_LMO_NAME	CAT(CAN_NODE_CONFIGURATOR_NAME, _LMO_4)
@@ -162,6 +120,30 @@ extern uint8_t Trajectory_data[6];
 #define CAN_STB_PIN_PORT_NAME		CAT(CAN_STB_PIN_CONFIGURATOR_NAME, _PORT)
 #define CAN_STB_PIN_PIN_NAME		CAT(CAN_STB_PIN_CONFIGURATOR_NAME, _PIN)
 #endif
+
+/* IRQ Event Source Names for XMC4700
+ * see XMC4700 Reference Manual Table 5-1 */
+/* CAN Interrupt Number Setting:  XMC1404 = IRQ3_IRQn;
+ * XMC4700 = CAN0_0_IRQn */
+#define CAN_IRQ_RX_REDUCE_PWR_NUMBER            CAN0_0_IRQn
+/* CAN Interrupt Handler Setting: XMC1404 = IRQ3_Handler;
+ * XMC4700 = IRQ_Hdlr_76 */
+#define CAN_IRQ_RX_REDUCE_PWR_MSG_HANDLER       IRQ_Hdlr_76
+
+#define CAN_IRQ_RX_VELOCITY_NUMBER       		CAN0_1_IRQn
+#define CAN_IRQ_RX_VELOCITY_MSG_HANDLER      	IRQ_Hdlr_77
+
+#define CAN_IRQ_RX_ENCODER_FL_NUMBER     		CAN0_2_IRQn
+#define CAN_IRQ_RX_ENCODER_FL_MSG_HANDLER   	IRQ_Hdlr_78
+#define CAN_IRQ_RX_ENCODER_FR_NUMBER     		CAN0_3_IRQn
+#define CAN_IRQ_RX_ENCODER_FR_MSG_HANDLER   	IRQ_Hdlr_79
+#define CAN_IRQ_RX_ENCODER_BL_NUMBER     		CAN0_4_IRQn
+#define CAN_IRQ_RX_ENCODER_BL_MSG_HANDLER   	IRQ_Hdlr_80
+#define CAN_IRQ_RX_ENCODER_BR_NUMBER     		CAN0_5_IRQn
+#define CAN_IRQ_RX_ENCODER_BR_MSG_HANDLER   	IRQ_Hdlr_81
+
+#define CAN_IRQ_RX_ENABLE_PWR_NUMBER     		CAN0_6_IRQn
+#define CAN_IRQ_RX_ENABLE_PWR_MSG_HANDLER   	IRQ_Hdlr_82
 
 /* Interrupt event source names - see XMC4700 Reference Manual */
 /* Defines IRQ number of the period match event interrupt */

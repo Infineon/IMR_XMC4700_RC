@@ -41,20 +41,44 @@
 *
 *****************************************************************************/
 
+#include <stdint.h>
+#include <stdlib.h>
+#include <stdbool.h>
+
 #include "IMR_CAN_GLOBAL.h"
 #include "cybsp.h"
 #include "cy_utils.h"
 #include "Libraries/CAN/IMR_CAN.h"
 #include "Libraries/IMRRC.h"
 #include "Libraries/IMRMecanum.h"
-#include <stdint.h>
-#include <stdlib.h>
+#include "Libraries/ADCinput/IMRADCinput.h"
 
+/* Interrupt for LED bar-graph.
+ * Note CCU40_2_IRQn is already used by TIMER_TIMEOUT */
+#define MTRSPEED_LED_PERIOD_MATCH_EVENT_IRQN		CCU40_0_IRQn
+#define MTRSPEED_LED_PERIOD_MATCH_EVENT_HANDLER		IRQ_Hdlr_44
+#if POTI_INPUT
+#define MAX_SPEED_VAL	16380.0 // (4095*8/2) = scaled ADC value
+#else
+#define MAX_SPEED_VAL	32768.0 // (INT16)
+#endif
+
+/*****************************************************************************
+ * Global variables
+*****************************************************************************/
 uint8_t RC_failsafe = 0;
 int16_t remote_v[3] = { 0 , 0 , 0 }; // Trajectory values from RC
 RCinput_t RemoteControl_IN;
 int16_t wS[4]; 
+int16_t motorOutput[4] = { 0 };
 extern float encoderSpeed[4];
+
+#if POTI_INPUT //potentiometer for speed control
+bool zeropass = false;
+int16_t poti_speed_left, poti_speed_right;
+#endif
+
+uint8_t* git_commit_hash = (uint8_t*)GIT_COMMIT_HASH;
 
 /******************************************************************************
  * CANStatus_LED:
@@ -68,46 +92,37 @@ void CANStatus_LED(CAN_STATUS_t status)
 	else XMC_GPIO_SetOutputHigh(LED_Blue_PORT,LED_Blue_PIN); // LED OFF
 }
 
-/***
- * 
+/******************************************************************************
  * Timer Interrupt
- * 
- * - Called every 100ms to send current wheelspeeds to the Motor Control
- * 
- ***/
-
+ * - Called every 100ms to send current wheels' speed to the Motor Control
+ *****************************************************************************/
 void TIMER_TIMEOUT_PERIOD_MATCH_EVENT_HANDLER(void)
 {
 	uint8_t CANBuffer[6];
 	CAN_STATUS_t sendStatus;
-	int16_t motorOutput[4] = { 0 };
 
+#if POTI_INPUT
+	if(!zeropass && abs(poti_speed_left) < 100 &&
+			abs(poti_speed_right) < 100) {
+		zeropass = true;
+	}
+	// require both potis to be close to 0 before first motor movement
+	if (zeropass){
+		wS[0] = poti_speed_left;
+		wS[1] = poti_speed_right;
+		wS[2] = poti_speed_left;
+		wS[3] = poti_speed_right;
+	}
+#endif
 	applyFIRFilter(wS, motorOutput);
 
-	CANBuffer[0] = (uint8_t)
-			((((int16_t)(motorOutput[0] * 1) & 0xFF00) >> 8) & 0xFF);
-	CANBuffer[1] = (uint8_t)((int16_t)(motorOutput[0] * 1) & 0xFF);
-	sendStatus = CAN_TX_Request(MOT_FL_SPEED_COMMAND, CANBuffer, 2);
-	CANStatus_LED(sendStatus);
-
-	CANBuffer[0] = (uint8_t)
-			((((int16_t)(motorOutput[1] * 1) & 0xFF00) >> 8) & 0xFF);
-	CANBuffer[1] = (uint8_t)((int16_t)(motorOutput[1] * 1) & 0xFF);
-	sendStatus = CAN_TX_Request(MOT_FR_SPEED_COMMAND, CANBuffer, 2);
-	CANStatus_LED(sendStatus);
-
-	CANBuffer[0] = (uint8_t)
-			((((int16_t)(motorOutput[2] * 1) & 0xFF00) >> 8) & 0xFF);
-	CANBuffer[1] = (uint8_t)((int16_t)(motorOutput[2] * 1) & 0xFF);
-	sendStatus = CAN_TX_Request(MOT_BL_SPEED_COMMAND, CANBuffer, 2);
-	CANStatus_LED(sendStatus);
-
-	CANBuffer[0] = (uint8_t)
-			((((int16_t)(motorOutput[3] * 1) & 0xFF00) >> 8) & 0xFF);
-	CANBuffer[1] = (uint8_t)((int16_t)(motorOutput[3] * 1) & 0xFF);
-	sendStatus = CAN_TX_Request(MOT_BR_SPEED_COMMAND, CANBuffer, 2);
-	CANStatus_LED(sendStatus);
-
+	// send required motor speed to all 4 IMD701A boards
+	for (int i = 0; i < 4; i++) {
+		CANBuffer[0] = (uint8_t)(((motorOutput[i] & 0xFF00) >> 8) & 0xFF);
+		CANBuffer[1] = (uint8_t) ((motorOutput[i]) & 0xFF);
+		sendStatus = CAN_TX_Request(MOT_FL_SPEED_COMMAND + i, CANBuffer, 2);
+		CANStatus_LED(sendStatus);
+	}
 	memset(wS,0,8);
 
 	if(Trajectory_ttl > 0U) {
@@ -120,7 +135,6 @@ void TIMER_TIMEOUT_PERIOD_MATCH_EVENT_HANDLER(void)
 		}
 		Trajectory_ttl--;
 	}
-
 	// Sending Odometry
 	int16_t v_odo[3]; // Odometry estimate
 	estimateOdometry(encoderSpeed, v_odo);
@@ -134,28 +148,57 @@ void TIMER_TIMEOUT_PERIOD_MATCH_EVENT_HANDLER(void)
 	CANStatus_LED(sendStatus);
 }
 
-/***
- * 
+/******************************************************************************
+ * LED control interrupt with potentiometer's input
+ * - Called every 1sec to send current wheels' speed to the LED boards
+ *****************************************************************************/
+void MTRSPEED_LED_PERIOD_MATCH_EVENT_HANDLER(void) {
+	int16_t mtr_speed[4];
+	// scale the motorOutput from 0 - 16380 values to 0 - 100 (%)
+	// +1 is to ensure that max. reading reaches 100%
+	for (int i = 0; i < 4; i++) {
+		mtr_speed[i] = (int16_t)
+					   ((float)motorOutput[i] / (MAX_SPEED_VAL / 100.0));
+		if (mtr_speed[i] < 0) mtr_speed[i] = mtr_speed[i] - 1;
+		else mtr_speed[i] = mtr_speed[i] + 1;
+	}
+#if (BARGRAPH_ENABLED && !SPEED_LED_BY_PSC3)
+#if (BARGRAPH_CONFIG == 0)
+	barGraph(mtr_speed[0], mtr_speed[1]);
+#elif (BARGRAPH_CONFIG == 1)
+	barGraph(mtr_speed[0], mtr_speed[1]);
+	barGraph(mtr_speed[2], mtr_speed[3]);
+#elif (BARGRAPH_CONFIG == 2)
+	ledSnake_shortBoard(mtr_speed[0], mtr_speed[1]);
+#endif
+#endif
+}
+
+/******************************************************************************
  * MAIN METHOD
- * 
- ***/
+ *****************************************************************************/
 int main(void)
 {
     cy_rslt_t result;
 
     /* Initialize the device and board peripherals */
     result = cybsp_init();
-	
-	CAN_Initialize();
-	XMC_GPIO_SetOutputHigh(LED_Blue_PORT,LED_Blue_PIN); 	// LED OFF
-	XMC_GPIO_SetOutputHigh(LED_Green_PORT,LED_Green_PIN);	// LED OFF
-	XMC_UART_CH_EnableInputInversion(SBUS_UART_HW, XMC_UART_CH_INPUT_RXD);
-
-    XMC_CCU4_SLICE_StartTimer(TIMER_TIMEOUT_HW);
     if (result != CY_RSLT_SUCCESS)
     {
         CY_ASSERT(0);
     }
+	CAN_Initialize();
+
+	/* Start timers and enable interrupt for LED timer */
+#if (BARGRAPH_ENABLED && !SPEED_LED_BY_PSC3)
+	NVIC_EnableIRQ(MTRSPEED_LED_PERIOD_MATCH_EVENT_IRQN);
+    XMC_CCU4_SLICE_StartTimer(MTRSPEED_LED_HW);
+#endif
+    XMC_CCU4_SLICE_StartTimer(TIMER_TIMEOUT_HW);
+
+    XMC_GPIO_SetOutputHigh(LED_Blue_PORT,LED_Blue_PIN); 	// LED OFF
+	XMC_GPIO_SetOutputHigh(LED_Green_PORT,LED_Green_PIN);	// LED OFF
+	XMC_UART_CH_EnableInputInversion(SBUS_UART_HW, XMC_UART_CH_INPUT_RXD);
 
 	if(false)  // enable/disable for static LED display.
 	{
@@ -164,6 +207,11 @@ int main(void)
 		input.Switch_SA = 1; // pulsing
 		readLEDinput(input);
 	}
+#if POTI_INPUT
+	ADC_Initialize();
+#endif
+	// Send out commit hash of currently flashed software
+	CAN_TX_Request(COMMIT_HASH, (uint8_t*)git_commit_hash, 7);
 
     // LOOP
     while(1U)
@@ -174,7 +222,8 @@ int main(void)
 		    if(sbus_data.failsafe == false)
 		    	RC_failsafe = RC_TIME_TO_LIVE;
 
-		    // delete for not using LED control via RemoteControl
+		    // can be commented if LED control is not to be used
+		    // via RemoteControl
 		    readLEDinput(RemoteControl_IN);
 
 		    memset(remote_v,0,6);
@@ -194,9 +243,12 @@ int main(void)
 	    }
 	    // Green OnBoard LED will be off
 	    // if no RC commands are received after TTL.
-	    else if(RC_failsafe != 0) {
+	    if(RC_failsafe != 0) {
 		    RC_failsafe--; 
-		    XMC_GPIO_SetOutputHigh(LED_Green_PORT, LED_Green_PIN);
+		    XMC_GPIO_SetOutputLow(LED_Green_PORT, LED_Green_PIN);
+	    }
+	    else {
+			XMC_GPIO_SetOutputHigh(LED_Green_PORT, LED_Green_PIN);
 	    }
 	    memset(remote_v,0,6);
     }

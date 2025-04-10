@@ -174,12 +174,19 @@ void CAN_IRQ_RX_ENCODER_BR_MSG_HANDLER(void) {
 	}
 #if (BARGRAPH_ENABLED)
 	//Bargraph Pattern for embedded world demo
+#if (BARGRAPH_CONFIG != 2)
 	if (id == BAR_GRAPH) {
-		barGraph(id, data[0], data[1]);
+		barGraph(data[0], data[1]);
 	}
-#if (!BARGRAPH_FRONT_ONLY)
+#endif
+#if (BARGRAPH_CONFIG == 1)
 	if ((id == BAR_GRAPH_BACK)) {
-		barGraph(id, data[1], data[0]);
+		barGraph(data[1], data[0]);
+	}
+#endif
+#if (BARGRAPH_CONFIG == 2)
+	if (id == BAR_GRAPH) {
+		ledSnake_shortBoard(data[0], data[1]);
 	}
 #endif
 #endif

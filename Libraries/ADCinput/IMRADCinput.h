@@ -1,5 +1,5 @@
 /******************************************************************************
- * (c) (2024), Cypress Semiconductor Corporation (an Infineon company) or
+ * (c) (2024-2025), Cypress Semiconductor Corporation (an Infineon company) or
  * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
  * This software, including source code, documentation and related
  * materials ("Software") is owned by Cypress Semiconductor Corporation
@@ -29,44 +29,15 @@
  * of such system or application assumes all risk of such use and in doing so
  * agrees to indemnify Cypress against all liability.
 ******************************************************************************/
+#ifndef IMRADCINPUT_H
+#define IMRADCINPUT_H
 
-#ifndef LIBRARIES_IMRRC_H_
-#define LIBRARIES_IMRRC_H_
+#define POTI_INPUT 0
 
-#include "IMRRC.h"
 #include "cybsp.h"
-#include "cy_utils.h"
-#include "SBUS/SBUS.h"
 
-#define RC_STICK_CENTER_VALUE	1000	// approximate stick center value
-										// received from RC
-#define RC_STICK_MAX_DEVIATION	800		// max. deviation from
-										// RC_STICK_CENTER_VALUE
-#define RC_STICK_MAX_TARGET		100		// max. desired value (+ & -)
-										// for stick values
-#define RC_STICK_DEADZONE_POS	5		// (+) deadzone value for RC
-#define RC_STICK_DEADZONE_NEG	-5		// (-) deadzone value for RC
+extern int16_t poti_speed_left, poti_speed_right;
 
-#define RC_TIME_TO_LIVE			150		// max num of iterations an RC command
-										// will be used until it is declared
-										// as disconnected
+void ADC_Initialize(void);
 
-typedef struct {
-	bool		RC_TimeOut;
-	int16_t		LeftStick_UpDown;
-	int16_t		LeftStick_LeftRight;
-	int16_t		RightStick_UpDown;
-	int16_t		RightStick_LeftRight;
-	// values for the next 3 switches:
-	// 3: Low Position; 2: Middle Position; 1: Top Position
-	int16_t		Switch_SD;
-	int16_t		Switch_SA;
-	int16_t		Switch_SB;
-} RCinput_t;
-
-RCinput_t Process_RC_Inputs(SbusData_t RC_Input);
-
-void readLEDinput(RCinput_t RCinput);
-void sendLedCmds(uint8_t LEDSW_current_state, uint8_t RGB[3]);
-
-#endif  // LIBRARIES_IMRRC_H_
+#endif /* IMRADCINPUT_H */

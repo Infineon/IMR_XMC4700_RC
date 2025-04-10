@@ -33,25 +33,45 @@
 
 #include "IMRLedPattern.h"
 
-/**
+/******************************************************************************
+ * Definition
+ *****************************************************************************/
+#define N_LEDS_ISHAPE	5
+#define N_LEDS_USHAPE	23
+
+#if (BARGRAPH_CONFIG == 0)
+// 11 front U_SHAPE + 5 side I_SHAPE + 11 back U_SHAPE
+#define N_LEDS_FULL_BAR	27
+#elif (BARGRAPH_CONFIG == 1)
+#define N_LEDS_FULL_BAR	13 // 11 front or back U_SHAPE + 2 side I_SHAPE
+#elif (BARGRAPH_CONFIG == 2)
+#define N_LEDS_FULL_BAR	15 // 3 * 5 side I_SHAPE
+#endif
+
+/******************************************************************************
+ * Global variables
+ *****************************************************************************/
+uint8_t color_left[3]  = {0x70, 0x15, 0x45}; // MAGENTA color
+uint8_t color_right[3] = {0x15, 0x70, 0x45}; // CYAN color
+uint8_t color_off[3]   = {0};
+
+/******************************************************************************
  * Converts the robot LED pattern to the board LED patterns.
  * 
  * This function maps the robot LED pattern to the board LED patterns.
- * The robot LED pattern is a 3x56 array, and the LED patterns for the 12 boards is a 12x23 array.
+ * The robot LED pattern is a 3x56 array,
+ * and the LED patterns for the 12 boards is a 12x23 array.
  * 
  * robotLED: A 3x56 array representing the robot LED pattern.
  * boardLEDs: A 12x23 array representing the board LED patterns.
- */
+ *****************************************************************************/
 void robotLED2boardLED(bool robotLED[3][56], bool boardLEDs[12][23])
 {
-	for (int i = 0; i < 3; i++)  // layers
-	{
-		uint8_t i_led = 0; // index of LED in layer (robotled indexing)
-		for (int j = 0; j < 4; j++) // boards
-		{	
-			uint8_t n_leds = j%2 == 0 ?	23 : 5;  // number of leds on board
-			for (int k = 0; k < n_leds; k++) // LEDs
-			{
+	for (int i = 0; i < 3; i++) { // layers
+		uint8_t i_led = 0; // index of LED in layer (robot_led indexing)
+		for (int j = 0; j < 4; j++) { // boards
+			uint8_t n_leds = j%2 == 0 ?	23 : 5;	// number of LEDs on board
+			for (int k = 0; k < n_leds; k++) {	// LEDs
 				boardLEDs[i*4+j][k] = robotLED[i][k + i_led];
 			}
 			i_led += n_leds;
@@ -59,16 +79,19 @@ void robotLED2boardLED(bool robotLED[3][56], bool boardLEDs[12][23])
 	}
 }
 
-/**
+/******************************************************************************
  * Converts the board LED pattern to a CAN mask.
  * 
- * This function converts the board LED pattern to a CAN mask, which is used for communication.
- * The board LED pattern is a 23-element array, and the CAN mask is a 3-element array.
+ * This function converts the board LED pattern to a CAN mask,
+ * which is used for communication.
+ * The board LED pattern is a 23-element array,
+ * and the CAN mask is a 3-element array.
  * 
- * boardLED: A 23-element array representing the board LED pattern.
- * preserve_old: A boolean flag indicating whether to preserve the state of the masked leds or turn them off.
- * CANmask: A 3-element array representing the CAN mask.
- */
+ * boardLED		: A 23-element array representing the board LED pattern.
+ * preserve_old	: A boolean flag indicating whether to preserve
+ * 				  the state of the masked leds or turn them off.
+ * CANmask		: A 3-element array representing the CAN mask.
+ *****************************************************************************/
 void boardLED2CANmask(bool boardLED[23], bool preserve_old, uint8_t CANmask[3])
 {
 	for (int i = 0; i < 23; i++) {
@@ -80,101 +103,114 @@ void boardLED2CANmask(bool boardLED[23], bool preserve_old, uint8_t CANmask[3])
 			CANmask[byte_index] &= ~(1 << bit_index);
 		}
 	}
-
 	// Invert CANmask
 	for (int i = 0; i < 3; i++) {
 		CANmask[i] = ~CANmask[i];
 	}
-
 	if (preserve_old) {
-		CANmask[0] |= 0x80;  // set bit 7 to 1 to keep masked LEDs in old status
+		// set bit 7 to 1 to keep masked LEDs in old status
+		CANmask[0] |= 0x80;
 	}
 }
 
-/**
+/******************************************************************************
+ * Set LED color from appearance to hex values
+ * color		: color interpretation (see enumeration list)
+ * rgb_color	: hex values of the RGB
+ *****************************************************************************/
+void setLEDColor(LED_COLOR_t color, uint8_t rgb_color[3])
+{
+	switch (color){
+	case CYAN: // OCEAN and CYAN (lighter) is similar here
+		rgb_color[0] = 0x15;  rgb_color[1] = 0x70; rgb_color[2] = 0x45;
+		break;
+	case MAGENTA: // BERRY (lighter) and MAGENTA is similar here
+		rgb_color[0] = 0x70;  rgb_color[1] = 0x15; rgb_color[2] = 0x45;
+		break;
+	case WHITE: // GREY and WHITE is similar here
+		rgb_color[0] = 0xB9;  rgb_color[1] = 0xB9; rgb_color[2] = 0xB9;
+		break;
+	case LAWN: // GREEN and LAWN is similar here
+		rgb_color[0] = 0x9B;  rgb_color[1] = 0xBA; rgb_color[2] = 0x15;
+		break;
+	}
+}
+
+/******************************************************************************
+ * Transmit the desired LED pattern via CAN with fixed LED mode: steady
+ *
+ * boardLED		: status of LED IC in each LED board up to 23 LED pieces
+ * rgb_color	: LED RGB values to get to the desired color
+ * ID			: CAN message ID to start with the transmission
+ * offset		: shift in the CAN message ID
+ *****************************************************************************/
+void patternCANTX(bool boardLED[23], uint8_t rgb_color[3],
+		IMR_CAN_MESSAGE_IDS_t ID, uint32_t offset)
+{
+	uint8_t can_data[8];
+	uint8_t CANmask[3] = {0};
+
+	can_data[0] = LED_MODE_STEADY; //this mode does not use CAN timing
+	can_data[4] = 30; // dummy value for CAN timing
+	for (int i = 0; i < 3; i++) {
+		can_data[i+1] = rgb_color[i];
+	}
+	boardLED2CANmask(boardLED, true, CANmask);
+	for (int j = 0; j < 3; j++)
+		can_data[5 + j] = CANmask[j];
+	CAN_TX_Request(ID + offset, can_data, 8);
+}
+
+/******************************************************************************
  * Controls the LED bar graph.
  * 
  * This function controls the LED bar graph based on the given parameters.
- * It expects values in the range [-27, 27] for the number of LEDs on the left and right sides.
- * The function serves as a sample for implementing custom LED patterns on the IMR.
+ * The function serves as a sample for implementing custom LED patterns
+ * on the IMR. The motor speed is in the range of 0 to 100 (%)
  * 
- * CAN_ID: The CAN ID for the bar graph.
- * n_leds_left: The number of LEDs on the left side of the bar graph.
- * n_leds_right: The number of LEDs on the right side of the bar graph.
- */
-void barGraph(uint32_t CAN_ID, int8_t n_leds_left, int8_t n_leds_right)
+ * left_speed	: The left motor speed to be represented by the no. of LEDs
+ * right_speed	: The right motor speed to be represented by the no. of LEDs
+ *****************************************************************************/
+void barGraph(int8_t left_speed, int8_t right_speed)
 {
-	uint8_t led_command[8];
-	uint8_t color_left_r = 0x70;
-	uint8_t color_left_g = 0x15;
-	uint8_t color_left_b = 0x45;
+	int8_t n_leds_left = left_speed * N_LEDS_FULL_BAR / 100;
+	int8_t n_leds_right = right_speed * N_LEDS_FULL_BAR / 100;
 
-	if (n_leds_left < 0) 
-	{
-		n_leds_left = -n_leds_left;
-		color_left_r = 0x15;	// change color for forward/backward
-		color_left_g = 0x70;
-		color_left_b = 0x45;
-	}
+	if (n_leds_left  < 0) { // forward motion with n_leds_right(+)
+		n_leds_left  = -n_leds_left;
+		setLEDColor(CYAN, color_left);
+	} else setLEDColor(MAGENTA, color_left); // backward motion
 
-	uint8_t color_right_r = 0x15;
-	uint8_t color_right_g = 0x70;
-	uint8_t color_right_b = 0x45;
-
-	if (n_leds_right < 0) 
-	{
+	if (n_leds_right < 0) { // backward motion with n_leds_left(+)
 		n_leds_right = -n_leds_right;
-		color_right_r = 0x70;
-		color_right_g = 0x15;
-		color_right_b = 0x45;
+		setLEDColor(MAGENTA, color_right);
+	} else setLEDColor(CYAN, color_right); // forward motion
+
+	bool robotLEDlayer[56] = {0}; 	  // 1 layer with total 56 LEDs to be ON
+	bool robotLEDlayer_off[56] = {0}; // 1 layer with total 56 LEDs to be OFF
+	bool robotLED[3][56] = {{0}}; 	  // all 3 layers in IMR to be ON
+	bool robotLED_off[3][56] = {{0}}; // all 3 layers in IMR to be OFF
+
+	// IMR LED boards: 3 layers * 4 positions (front, left, back, right)
+	// and up to 23 LEDs in each board (USHAPE)
+	bool boardLEDs[12][N_LEDS_USHAPE] = {{0}};
+	bool boardLEDs_off[12][N_LEDS_USHAPE] = {{0}};
+
+	// bitwise representation of all LEDs (horizontally) on the left;
+	// -1 is to shift whole bar one bit to the right to set robotLEDlayer
+	// to true so LEDs light up at the right positions
+	uint32_t bar_left = (n_leds_left == 0 ? 0 :(1 << n_leds_left)-1);
+	uint32_t bar_right = (n_leds_right == 0 ? 0 : (1 << n_leds_right)-1);
+
+	// left side
+	for (int i = 0; i < N_LEDS_FULL_BAR; i++) {
+		robotLEDlayer[i + 12] = (bar_left >> i) & 1;
+		robotLEDlayer_off[i + 12] = !((bar_left >> i) & 1);
 	}
-
-	led_command[0] = LED_MODE_STEADY;
-	led_command[4] = 30;  // not used
-
-	bool robotLEDlayer[56] = {0};		// fill layer with left and right bar
-	bool robotLEDlayer_off[56] = {0};	// fill layer with the positions where the LEDs have to be turned off
-	
-	bool robotLED[3][56] = {{0}};  // all 3 layers identical
-	bool robotLED_off[3][56] = {{0}};
-
-	bool boardLEDs[12][23] = {{0}};
-	bool boardLEDs_off[12][23] = {{0}};
-
-	// bitwise representation of all leds (horizontally) on left & right side;
-	// shift whole bar one bit to the right to prevent LED 0 lighting up at speed 0
-	uint32_t bar_left = (n_leds_left == 0 ? 0 :((1 << (n_leds_left))-1));
-	uint32_t bar_right = (n_leds_right == 0 ? 0 : ((1 << (n_leds_right))-1));
-
-	//left side
-	led_command[1] = color_left_r;
-	led_command[2] = color_left_g;
-	led_command[3] = color_left_b;
-
-	if (CAN_ID == BAR_GRAPH)
-	{
-#if (BARGRAPH_FRONT_ONLY)
-		for (int i = 0; i < 27; i++)
-		{
-			robotLEDlayer[i + 12] = (bar_left >> (i)) & 1;
-			robotLEDlayer_off[i + 12] = !((bar_left >> (i)) & 1);
-		}
-#else
-		for (int i = 0; i < 13; i++)
-		{
-			robotLEDlayer[i + 12] = (bar_left >> (i)) & 1;
-			robotLEDlayer_off[i + 12] = !((bar_left >> (i)) & 1);
-		}
-#endif
-	}
-#if (!BARGRAPH_FRONT_ONLY)
-	else if (CAN_ID == BAR_GRAPH_BACK)
-	{
-		for (int i = 0; i < 13; i++)
-		{
-			robotLEDlayer[38 - i] = (bar_left >> (i)) & 1;
-			robotLEDlayer_off[38 - i] = !((bar_left >> (i)) & 1);
-		}
+#if (BARGRAPH_CONFIG == 1)
+	for (int i = 0; i < N_LEDS_FULL_BAR; i++) {
+		robotLEDlayer[38 - i] = (bar_left >> i) & 1;
+		robotLEDlayer_off[38 - i] = !((bar_left >> i) & 1);
 	}
 #endif
 	for (int i = 0; i < 3; i++) {
@@ -183,102 +219,172 @@ void barGraph(uint32_t CAN_ID, int8_t n_leds_left, int8_t n_leds_right)
 			robotLED_off[i][j] = robotLEDlayer_off[j];
 		}
 	}
-
 	robotLED2boardLED(robotLED, boardLEDs);
-	robotLED2boardLED(robotLED_off, boardLEDs_off);
-
-	for (int i = 0; i < 12; i++)  // loop over boards
-	{
-		uint8_t CANmask[3] = {0};
-		uint8_t	CANmask_off[3] = {0};
-		boardLED2CANmask(boardLEDs[i], true, CANmask);
-		boardLED2CANmask(boardLEDs_off[i], true, CANmask_off);
-		for (int j=0; j<3; j++)
-		{
-			led_command[5+j] = CANmask[j];
-		}
-		CAN_TX_Request(LED_LAYER_1_FRONT + i, led_command, 8);
+	for (int i = 0; i < 12; i++) { // start CAN transmit for all boards
+		patternCANTX(boardLEDs[i], color_left, LED_LAYER_1_FRONT, i);
 		XMC_Delay(1);
 	}
-
-	//right side
-	led_command[1] = color_right_r;
-	led_command[2] = color_right_g;
-	led_command[3] = color_right_b;
-
-	// reset robotLEDlayer
+	// right side: reset arrays after use with left side
+	// robotLEDlayer_off does not need to be reset at this stage as
+	// it should hold the data from left side
 	memset(robotLEDlayer, 0, sizeof(robotLEDlayer));
-	// robotLEDlayer_off does not need to be reset, contains info from left and right bar
-
-	if (CAN_ID == BAR_GRAPH)
-	{
-#if (BARGRAPH_FRONT_ONLY)
-		for (int i = 0; i < 27; i++)
-		{
-			robotLEDlayer[(10 - i + 56) % 56] = (bar_right >> i) & 1;
-			robotLEDlayer_off[(10 - i + 56) % 56] = !((bar_right >> i) & 1);
-		}
-#else
-		for (int i = 0; i < 13; i++)
-		{
-			robotLEDlayer[(10 - i + 56) % 56] = (bar_right >> i) & 1;
-			robotLEDlayer_off[(10 - i + 56) % 56] = !((bar_right >> i) & 1);
-		}
-#endif
-	}
-#if (!BARGRAPH_FRONT_ONLY)
-	else if (CAN_ID == BAR_GRAPH_BACK)
-	{
-		for (int i = 40; i < 53; i++)
-		{
-			robotLEDlayer[i%56] = (bar_right >> (i-40)) & 1;
-			robotLEDlayer_off[i%56] = !((bar_right >> (i-40)) & 1);
-		}
-	}
-#endif
-	// reset both robotLED and robotLED_off
 	memset(robotLED, 0, sizeof(robotLED));
-	memset(robotLED_off, 0, sizeof(robotLED_off));
-
-	for (int i = 0; i < 3; i++) {
-		for (int j = 0; j < 56; j++) {
-			robotLED[i][j] = robotLEDlayer[j];
-			robotLED_off[i][j] = robotLEDlayer_off[j];
-		}
-	}
-
-	// reset boardLEDs
 	memset(boardLEDs, 0, sizeof(boardLEDs));
 
-	robotLED2boardLED(robotLED, boardLEDs);
-	robotLED2boardLED(robotLED_off, boardLEDs_off);
-
-	for (int i = 0; i < 12; i++)  // loop over boards
-	{
-		uint8_t CANmask[3] = {0};
-		boardLED2CANmask(boardLEDs[i], true, CANmask);
-		for (int j=0; j<3; j++)
-		{
-			led_command[5+j] = CANmask[j];
-		}
-		CAN_TX_Request(LED_LAYER_1_FRONT + i, led_command, 8);
-		XMC_Delay(1);
+	for (int i = 0; i < N_LEDS_FULL_BAR; i++) {
+		robotLEDlayer[(10 - i + 56) % 56] = (bar_right >> i) & 1;
+		robotLEDlayer_off[(10 - i + 56) % 56] = !((bar_right >> i) & 1);
 	}
-
-	// send set LEDs within bargraph that are supposed to be turned off to RGB=[000] manually
-	led_command[1] = 0; // using LED_MODE_OFF would not work as it does not respect the bitmask
-	led_command[2] = 0;
-	led_command[3] = 0;
-
-	for (int i = 0; i < 12; i++)
-	{
-		uint8_t	CANmask_off[3] = {0};
-		boardLED2CANmask(boardLEDs_off[i], true, CANmask_off);
-		for (int j=0; j<3; j++)
-		{
-			led_command[5+j] = CANmask_off[j];
+#if (BARGRAPH_CONFIG == 1)
+	for (int i = 40; i < (40 + N_LEDS_FULL_BAR); i++) {
+		robotLEDlayer[i%56] = (bar_right >> (i-40)) & 1;
+		robotLEDlayer_off[i%56] = !((bar_right >> (i-40)) & 1);
+	}
+#endif
+	for (int i = 0; i < 3; i++) {
+		for (int j = 0; j < 56; j++) {
+			robotLED[i][j] = robotLEDlayer[j];
+			robotLED_off[i][j] = robotLEDlayer_off[j];
 		}
-		CAN_TX_Request(LED_LAYER_1_FRONT + i, led_command, 8);
+	}
+	robotLED2boardLED(robotLED, boardLEDs);
+	for (int i = 0; i < 12; i++) { // start CAN transmit for all boards
+		patternCANTX(boardLEDs[i], color_right, LED_LAYER_1_FRONT, i);
+		XMC_Delay(1);
+}
+	// send set LEDs within bargraph that are supposed to be turned off
+	// to RGB=[000] manually. Note that using LED_MODE_OFF would not work
+	// as it does not respect the bitmask
+	robotLED2boardLED(robotLED_off, boardLEDs_off);
+	for (int i = 0; i < 12; i++) { // start CAN transmit for all boards
+		patternCANTX(boardLEDs_off[i], color_off, LED_LAYER_1_FRONT, i);
 		XMC_Delay(1);
 	}
 }
+
+#if (BARGRAPH_CONFIG == 2)
+/******************************************************************************
+ * Controls the LEDs as speed indicator in mini IMR configuration:
+ * 3 IMR I_SHAPE on the left & 3 I_SHAPE on the right (no IMR U_SHAPE LED)
+ * The motor speed is in the range of 0 to 100 (%)
+ *
+ * IMR forward motion: (front) left_speed (-) & right_speed (+): CYAN
+ * color and bottom LED starts from the back to the front
+ *
+ * IMR backward motion: (front) left_speed (+) & right_speed (-): MAGENTA
+ * color and bottom LED starts from the front to the back
+ *
+ * left_speed	: The left motor speed to be represented by the no. of LEDs
+ * right_speed	: The right motor speed to be represented by the no. of LEDs
+ *****************************************************************************/
+void ledSnake_shortBoard(int8_t left_speed, int8_t right_speed)
+{
+	int8_t n_leds_left = left_speed * N_LEDS_FULL_BAR / 100;
+	int8_t n_leds_right = right_speed * N_LEDS_FULL_BAR / 100;
+
+	if (n_leds_left  < 0) { // forward motion with n_leds_right(+)
+		n_leds_left  = -n_leds_left;
+		setLEDColor(CYAN, color_left);
+	} else setLEDColor(MAGENTA, color_left); // backward motion
+
+	if (n_leds_right < 0) { // backward motion with n_leds_left(+)
+		n_leds_right = -n_leds_right;
+		setLEDColor(MAGENTA, color_right);
+	} else setLEDColor(CYAN, color_right); // forward motion
+
+	uint32_t bar_left  = (n_leds_left == 0 ? 0 :(1 << n_leds_left)-1);
+	uint32_t bar_right = (n_leds_right == 0 ? 0 : (1 << n_leds_right)-1);
+
+	// left side
+	bool leftLED_on[N_LEDS_FULL_BAR]   = {0}; // each LED to be ON
+	bool leftLED_off[N_LEDS_FULL_BAR]  = {0}; // each LED to be OFF
+	bool leftBOT_on[3][N_LEDS_USHAPE]  = {{0}}; //split into 3 boards
+	bool leftBOT_off[3][N_LEDS_USHAPE] = {{0}}; //split into 3 boards
+
+	for (int i = 0; i < N_LEDS_FULL_BAR; i++)
+	{
+		leftLED_on[i]  =  (bar_left >> i) & 1;
+		leftLED_off[i] = !(bar_left >> i) & 1;
+	}
+	if (left_speed < 0) { // forward motion: bottom LED board starts from back
+		for (int j = 0; j < N_LEDS_ISHAPE; j++)
+		{
+			leftBOT_on[0][j]  = leftLED_on[N_LEDS_ISHAPE-1-j]; // bottom board
+			leftBOT_off[0][j] = leftLED_off[N_LEDS_ISHAPE-1-j];
+
+			leftBOT_on[1][j]  = leftLED_on[N_LEDS_ISHAPE+j]; // mid board
+			leftBOT_off[1][j] = leftLED_off[N_LEDS_ISHAPE+j];
+
+			leftBOT_on[2][j]  = leftLED_on[N_LEDS_ISHAPE*3-1-j]; // top board
+			leftBOT_off[2][j] = leftLED_off[N_LEDS_ISHAPE*3-1-j];
+		}
+	}
+	else { // backward motion: bottom LED board starts from front
+		for (int j = 0; j < N_LEDS_ISHAPE; j++)
+		{
+			leftBOT_on[0][j]  = leftLED_on[j]; // bottom board
+			leftBOT_off[0][j] = leftLED_off[j];
+
+			leftBOT_on[1][j]  = leftLED_on[N_LEDS_ISHAPE*2-1-j]; // mid board
+			leftBOT_off[1][j] = leftLED_off[N_LEDS_ISHAPE*2-1-j];
+
+			leftBOT_on[2][j]  = leftLED_on[N_LEDS_ISHAPE*2+j]; // top board
+			leftBOT_off[2][j] = leftLED_off[N_LEDS_ISHAPE*2+j];
+		}
+	}
+	for (int i = 0; i < 3; i++) { // start CAN transmit for 3 short boards
+		patternCANTX(leftBOT_on[i], color_left, LED_LAYER_1_LEFT, i*4);
+		XMC_Delay(1);
+	}
+	// right side
+	bool rightLED_on[N_LEDS_FULL_BAR]   = {0}; // each LED to be ON
+	bool rightLED_off[N_LEDS_FULL_BAR]  = {0}; // each LED to be OFF
+	bool rightBOT_on[3][N_LEDS_USHAPE]  = {{0}}; //split into 3 boards
+	bool rightBOT_off[3][N_LEDS_USHAPE] = {{0}}; //split into 3 boards
+
+	for (int i = 0; i < N_LEDS_FULL_BAR; i++)
+	{
+		rightLED_on[i]  =  (bar_right >> i) & 1;
+		rightLED_off[i] = !(bar_right >> i) & 1;
+	}
+	if (right_speed < 0) { // backward motion: bottom LED starts from front
+		for (int j = 0; j < N_LEDS_ISHAPE; j++)
+		{
+			rightBOT_on[0][j]  = rightLED_on[N_LEDS_ISHAPE-1-j]; // bottom board
+			rightBOT_off[0][j] = rightLED_off[N_LEDS_ISHAPE-1-j];
+
+			rightBOT_on[1][j]  = rightLED_on[N_LEDS_ISHAPE+j]; // mid board
+			rightBOT_off[1][j] = rightLED_off[N_LEDS_ISHAPE+j];
+
+			rightBOT_on[2][j]  = rightLED_on[N_LEDS_ISHAPE*3-1-j]; // top board
+			rightBOT_off[2][j] = rightLED_off[N_LEDS_ISHAPE*3-1-j];
+		}
+	}
+	else { // forward motion: bottom LED board starts from back
+		for (int j = 0; j < N_LEDS_ISHAPE; j++)
+		{
+			rightBOT_on[0][j]  = rightLED_on[j]; // bottom board
+			rightBOT_off[0][j] = rightLED_off[j];
+
+			rightBOT_on[1][j]  = rightLED_on[N_LEDS_ISHAPE*2-1-j]; // mid board
+			rightBOT_off[1][j] = rightLED_off[N_LEDS_ISHAPE*2-1-j];
+
+			rightBOT_on[2][j]  = rightLED_on[N_LEDS_ISHAPE*2+j]; // top board
+			rightBOT_off[2][j] = rightLED_off[N_LEDS_ISHAPE*2+j];
+		}
+	}
+	for (int i = 0; i < 3; i++) { // start CAN transmit for 3 short boards
+		patternCANTX(rightBOT_on[i], color_right, LED_LAYER_1_RIGHT, i*4);
+		XMC_Delay(1);
+	}
+	// send set LEDs within bargraph that are supposed to be turned off
+	for (int i = 0; i < 3; i++) { // start CAN transmit for 3 short boards
+		patternCANTX(leftBOT_off[i], color_off, LED_LAYER_1_LEFT, i*4);
+		XMC_Delay(1);
+	}
+	for (int i = 0; i < 3; i++) { // start CAN transmit for 3 short boards
+		patternCANTX(rightBOT_off[i], color_off, LED_LAYER_1_RIGHT, i*4);
+		XMC_Delay(1);
+	}
+}
+#endif
