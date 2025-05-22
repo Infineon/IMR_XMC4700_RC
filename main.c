@@ -197,7 +197,11 @@ int main(void)
     XMC_CCU4_SLICE_StartTimer(TIMER_TIMEOUT_HW);
 
     XMC_GPIO_SetOutputHigh(LED_Blue_PORT,LED_Blue_PIN); 	// LED OFF
+#if (RC_ENABLED)
 	XMC_GPIO_SetOutputHigh(LED_Green_PORT,LED_Green_PIN);	// LED OFF
+#else
+	XMC_GPIO_SetOutputLow(LED_Green_PORT, LED_Green_PIN);	// LED ON
+#endif
 	XMC_UART_CH_EnableInputInversion(SBUS_UART_HW, XMC_UART_CH_INPUT_RXD);
 
 	if(false)  // enable/disable for static LED display.
@@ -216,6 +220,7 @@ int main(void)
     // LOOP
     while(1U)
     {
+#if (RC_ENABLED)
 	    if(SBUSRX_Parse() && !BMS_PowerReduced){
 		    RemoteControl_IN = Process_RC_Inputs(sbus_data);
 			
@@ -251,6 +256,7 @@ int main(void)
 			XMC_GPIO_SetOutputHigh(LED_Green_PORT, LED_Green_PIN);
 	    }
 	    memset(remote_v,0,6);
+#endif
     }
 }
 

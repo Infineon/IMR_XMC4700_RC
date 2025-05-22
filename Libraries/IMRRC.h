@@ -38,6 +38,8 @@
 #include "cy_utils.h"
 #include "SBUS/SBUS.h"
 
+#define RC_ENABLED				0		// 0: FrSky RC disabled; 1: enabled
+
 #define RC_STICK_CENTER_VALUE	1000	// approximate stick center value
 										// received from RC
 #define RC_STICK_MAX_DEVIATION	800		// max. deviation from
